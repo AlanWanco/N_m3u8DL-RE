@@ -128,6 +128,9 @@ N_m3u8DL-RE mux --input-dir tracks -o output.mkv
 # 单段点播或直播录制的分片未合并时，直接从任务目录合并各轨道并混流；原分片保留
 N_m3u8DL-RE mux -i index_2026-10-10_23-56-12 -o recording.mkv
 
+# 录制直播未开启 --live-real-time-merge 时，停止录制（含 Ctrl+C）后自动把各轨道分片合并为一个文件；
+# 默认保留原分片，--skip-merge 关闭该自动合并
+
 # 也可指定各轨道目录，并设置语言或标题
 N_m3u8DL-RE mux -i video_segments -i "path=audio_segments:lang=eng:name=English" -i "path=subtitle_segments:lang=chi:name=中文" -o recording.mkv
 

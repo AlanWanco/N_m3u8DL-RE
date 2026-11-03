@@ -1902,6 +1902,24 @@ internal static class StaticText
             zhTW: "分片刪除失敗，已保留：{0}（{1}）",
             enUS: "Failed to delete segment, kept on disk: {0} ({1})"
         ),
+        ["liveMergeEmptyTrack"] = new TextContainer
+        (
+            zhCN: "没有可合并的分片，跳过：{0}",
+            zhTW: "沒有可合併的分片，略過：{0}",
+            enUS: "No segments to merge, skipping: {0}"
+        ),
+        ["liveMergeFailed"] = new TextContainer
+        (
+            zhCN: "录制停止后合并分片失败：{0}（{1}）",
+            zhTW: "錄製停止後合併分片失敗：{0}（{1}）",
+            enUS: "Failed to merge segments after recording stopped: {0} ({1})"
+        ),
+        ["liveMergeMultiInit"] = new TextContainer
+        (
+            zhCN: "分片目录含多个 init 段（多 Period），无法按单段合并，请保留分片手动处理：{0}",
+            zhTW: "分片目錄含多個 init 段（多 Period），無法按單段合併，請保留分片手動處理：{0}",
+            enUS: "Segment directory has multiple init sections (multi-period) and cannot be merged as one track; keep the segments for manual processing: {0}"
+        ),
         ["liveNetworkTimeout"] = new TextContainer
         (
             zhCN: "直播请求等待超时",

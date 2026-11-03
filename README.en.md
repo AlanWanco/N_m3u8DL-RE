@@ -126,6 +126,9 @@ N_m3u8DL-RE mux --input-dir tracks -o output.mkv
 # Merge tracks and mux a single-part VOD download or live recording; original segments are preserved
 N_m3u8DL-RE mux -i index_2026-10-10_23-56-12 -o recording.mkv
 
+# Without --live-real-time-merge, stopping a live recording (including Ctrl+C) merges each track's
+# segments into one file; segments are kept by default and --skip-merge disables this merge
+
 # Track directories also accept language and title metadata
 N_m3u8DL-RE mux -i video_segments -i "path=audio_segments:lang=eng:name=English" -i "path=subtitle_segments:lang=chi:name=Chinese" -o recording.mkv
 

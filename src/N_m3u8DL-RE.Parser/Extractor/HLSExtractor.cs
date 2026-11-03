@@ -578,7 +578,8 @@ internal class HLSExtractor : IExtractor
             {
                 Url = ParserConfig.Url,
                 Playlist = playlist,
-                Extension = playlist.MediaParts.Any(part => part.MediaInit != null) ? "mp4" : "ts"
+                // 与刷新路径保持一致：fMP4 分片统一使用 m4s，避免同一目录混用 mp4/m4s 导致合并不识别。
+                Extension = playlist.MediaParts.Any(part => part.MediaInit != null) ? "m4s" : "ts"
             }
         ];
     }

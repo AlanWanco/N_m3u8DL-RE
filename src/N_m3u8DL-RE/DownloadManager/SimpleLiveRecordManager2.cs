@@ -28,6 +28,9 @@ internal class SimpleLiveRecordManager2
     // 分片与对应 init 一起入队，清单刷新后消费者仍使用该批次的初始化信息。
     private sealed record LiveSegmentBatch(List<MediaSegment> Segments, MediaSegment? Init);
 
+    // 未开启实时合并时，录制结束（含 Ctrl+C）后仍各轨道合并为一个文件；这里记录待合并的分片目录。
+    private sealed record PendingLiveTrack(int Index, string Directory, string SaveName, StreamSpec Spec, List<Mediainfo> MediaInfos);
+
     // 网络失败后每秒重试，尽快恢复请求，减少分片滑出直播窗口。
     private const int NetworkRetryDelaySeconds = 1;
     IDownloader Downloader;
@@ -37,6 +40,7 @@ internal class SimpleLiveRecordManager2
     ConcurrentDictionary<int, string> PipeSteamNamesDic = new();
     List<OutputFile> OutputFiles = [];
     private readonly LiveRecordingCleanup recordingCleanup;
+    private readonly List<PendingLiveTrack> pendingLiveTracks = [];
     private Task<bool>? pipeMuxTask;
     private readonly HashSet<string> reservedOutputPaths = new(OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
         ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
@@ -283,6 +287,12 @@ internal class SimpleLiveRecordManager2
                     });
                 }
             }
+            else if (!DownloaderConfig.MyOptions.LiveRealTimeMerge && !DownloaderConfig.MyOptions.LivePipeMux
+                     && !DownloaderConfig.MyOptions.SkipMerge && streamSpec.MediaType != Common.Enum.MediaType.SUBTITLES)
+            {
+                // 未实时合并：登记分片目录，停止录制后统一合并为一个文件。
+                RegisterPendingTrack();
+            }
             return !recordingFailed;
         }
 
@@ -303,6 +313,12 @@ internal class SimpleLiveRecordManager2
         else if (DownloaderConfig.MyOptions.SaveName != null)
         {
             saveName = $"{DownloaderConfig.MyOptions.SaveName}.{streamSpec.Language}".TrimEnd('.');
+        }
+
+        void RegisterPendingTrack()
+        {
+            lock (lockObj)
+                pendingLiveTracks.Add(new PendingLiveTrack(task.Id, tmpDir, saveName, streamSpec, mediaInfos));
         }
         var headers = DownloaderConfig.Headers;
         var decryptEngine = DownloaderConfig.MyOptions.DecryptionEngine;
@@ -1315,6 +1331,11 @@ internal class SimpleLiveRecordManager2
             }
         }
 
+        // 未实时合并时先各轨道合并分片，再走既有混流流程；Ctrl+C 停止后同样生效。
+        if (success && !DownloaderConfig.MyOptions.LiveRealTimeMerge && !DownloaderConfig.MyOptions.LivePipeMux
+                     && pendingLiveTracks.Count > 0)
+            success = await MergePendingLiveTracksAsync();
+
         // 混流
         if (success && DownloaderConfig.MyOptions.MuxAfterDone && OutputFiles.Count > 0)
         {
@@ -1388,6 +1409,50 @@ internal class SimpleLiveRecordManager2
                 actualEnd.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff zzz"));
         CleanupRecording(success);
         return success;
+    }
+
+    // 停止录制（含 Ctrl+C）后把每条轨道的分片目录合并成一个文件，再交给既有混流流程。
+    private async Task<bool> MergePendingLiveTracksAsync()
+    {
+        var saveDir = DownloaderConfig.MyOptions.SaveDir ?? Environment.CurrentDirectory;
+        var allSucceeded = true;
+        foreach (var track in pendingLiveTracks.OrderBy(t => t.Index))
+        {
+            var target = Path.Combine(saveDir, track.SaveName + LiveTrackMerge.OutputExtension(track.Spec));
+            if (!LiveTrackMerge.HasSegments(track.Directory))
+            {
+                Logger.Warn(string.Format(ResString.liveMergeEmptyTrack, track.Directory));
+                continue;
+            }
+            Logger.WarnMarkUp($"Merging [grey]{Path.GetFileName(track.Directory).EscapeMarkup()}[/] -> [grey]{Path.GetFileName(target).EscapeMarkup()}[/]");
+            try
+            {
+                if (!await LiveTrackMerge.ConcatAsync(track.Directory, target, CancellationToken.None))
+                {
+                    Logger.Error(string.Format(ResString.liveMergeFailed, target, ResString.liveMergeEmptyTrack));
+                    allSucceeded = false;
+                    continue;
+                }
+                lock (lockObj)
+                {
+                    OutputFiles.Add(new OutputFile
+                    {
+                        Index = track.Index,
+                        FilePath = target,
+                        LangCode = track.Spec.Language,
+                        Description = track.Spec.Name,
+                        Mediainfos = track.MediaInfos,
+                        MediaType = track.Spec.MediaType,
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(string.Format(ResString.liveMergeFailed, target, ex.Message));
+                allSucceeded = false;
+            }
+        }
+        return allSucceeded;
     }
 
     private void CleanupRecording(bool success)
