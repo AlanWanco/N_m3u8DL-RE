@@ -1890,6 +1890,18 @@ internal static class StaticText
             zhTW: "直播請求已恢復，繼續錄製",
             enUS: "Live request recovered, continuing recording"
         ),
+        ["liveMergeSegmentMissing"] = new TextContainer
+        (
+            zhCN: "合并时源分片已不存在，跳过：{0}",
+            zhTW: "合併時來源分片已不存在，略過：{0}",
+            enUS: "Source segment no longer exists while merging, skipping: {0}"
+        ),
+        ["liveSegmentDeleteFailed"] = new TextContainer
+        (
+            zhCN: "分片删除失败，已保留：{0}（{1}）",
+            zhTW: "分片刪除失敗，已保留：{0}（{1}）",
+            enUS: "Failed to delete segment, kept on disk: {0} ({1})"
+        ),
         ["liveNetworkTimeout"] = new TextContainer
         (
             zhCN: "直播请求等待超时",

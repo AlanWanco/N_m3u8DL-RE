@@ -234,6 +234,8 @@ public static class ResString
     public static string liveSegmentUnavailable => GetText("liveSegmentUnavailable");
     public static string liveHlsSequenceChanged => GetText("liveHlsSequenceChanged");
     public static string liveSegmentNotReady => GetText("liveSegmentNotReady");
+    public static string liveMergeSegmentMissing => GetText("liveMergeSegmentMissing");
+    public static string liveSegmentDeleteFailed => GetText("liveSegmentDeleteFailed");
     public static string httpTooManyRedirects => GetText("httpTooManyRedirects");
     public static string saveName => GetText("saveName");
     public static string taskStartAt => GetText("taskStartAt");

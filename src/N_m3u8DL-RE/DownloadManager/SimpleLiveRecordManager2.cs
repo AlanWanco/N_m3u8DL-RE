@@ -510,7 +510,7 @@ internal class SimpleLiveRecordManager2
                             }
                             finally
                             {
-                                File.Delete(clockFile);
+                                LiveSegmentCleanup.TryDelete(clockFile);
                             }
                         }
                         // 实时解密
@@ -521,7 +521,7 @@ internal class SimpleLiveRecordManager2
                             var dResult = await MP4DecryptUtil.DecryptAsync(decryptEngine, decryptionBinaryPath, DownloaderConfig.MyOptions.Keys, enc, dec, currentKID, mp4InitFile);
                             if (dResult)
                             {
-                                File.Delete(enc);
+                                LiveSegmentCleanup.TryDelete(enc);
                                 result.ActualFilePath = dec;
                             }
                             else if (DownloaderConfig.MyOptions.Keys is { Length: > 0 })
@@ -568,7 +568,7 @@ internal class SimpleLiveRecordManager2
                             var dResult = await MP4DecryptUtil.DecryptAsync(decryptEngine, decryptionBinaryPath, DownloaderConfig.MyOptions.Keys, enc, dec, currentKID, mp4InitFile);
                             if (dResult)
                             {
-                                File.Delete(enc);
+                                LiveSegmentCleanup.TryDelete(enc);
                                 result.ActualFilePath = dec;
                             }
                             else if (DownloaderConfig.MyOptions.Keys is { Length: > 0 })
@@ -812,8 +812,15 @@ internal class SimpleLiveRecordManager2
                                 files = [initResult.ActualFilePath, ..files];
                             }
                         }
+                        // 逐个合并；源分片在合并前消失时告警跳过，而不是中断整场录制。
+                        var mergedInputs = new List<string>(files.Length);
                         foreach (var inputFilePath in files)
                         {
+                            if (!File.Exists(inputFilePath))
+                            {
+                                Logger.Warn(string.Format(ResString.liveMergeSegmentMissing, inputFilePath));
+                                continue;
+                            }
                             using (var inputStream = File.OpenRead(inputFilePath))
                             {
                                 var startPosition = inputStream.Position;
@@ -821,13 +828,14 @@ internal class SimpleLiveRecordManager2
                                 // CopyTo 成功后，用输入流的位置差累计实际写出的字节数。
                                 mergedBytesWritten += inputStream.Position - startPosition;
                             }
+                            mergedInputs.Add(inputFilePath);
                         }
+                        // 先把合并结果刷出缓冲区，再删除源分片；反过来会在进程中断时
+                        // 留下“源分片已删、输出缺一段”的不可恢复缺口。
+                        fileOutputStream.Flush();
                         if (!DownloaderConfig.MyOptions.LiveKeepSegments)
                         {
-                            foreach (var inputFilePath in files.Where(x => !Path.GetFileName(x).StartsWith("_init")))
-                            {
-                                File.Delete(inputFilePath);
-                            }
+                            LiveSegmentCleanup.DeleteMergedSegments(mergedInputs);
                         }
                         FileDic.Clear();
                         if (initResult != null)
@@ -839,14 +847,7 @@ internal class SimpleLiveRecordManager2
                     {
                         var initResult = mediaInit != null ? FileDic[mediaInit!]! : null;
                         var files = FileDic.OrderBy(s => GetRecordOrder(s.Key)).Select(f => f.Value).Select(v => v!.ActualFilePath).ToArray();
-                        foreach (var inputFilePath in files)
-                        {
-                            if (!DownloaderConfig.MyOptions.LiveKeepSegments && !Path.GetFileName(inputFilePath).StartsWith("_init"))
-                            {
-                                File.Delete(inputFilePath);
-                            }
-                        }
-
+                        // 字幕同样先写输出再删源文件，写失败时保留素材。
                         // 处理图形字幕
                         await SubtitleUtil.TryWriteImagePngsAsync(currentVtt, tmpDir);
 
@@ -860,6 +861,11 @@ internal class SimpleLiveRecordManager2
                         fileOutputStream.Write(subBytes);
                         fileOutputStream.SetLength(subBytes.Length);
                         mergedBytesWritten = subBytes.Length;
+                        fileOutputStream.Flush();
+                        if (!DownloaderConfig.MyOptions.LiveKeepSegments)
+                        {
+                            LiveSegmentCleanup.DeleteMergedSegments(files);
+                        }
                         FileDic.Clear();
                         if (initResult != null)
                         {
